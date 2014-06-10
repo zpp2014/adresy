@@ -10,6 +10,9 @@
 #include <cppconn/resultset.h>
 #include <cppconn/statement.h>
 
+
+// g++ -Wall check_ver4.cpp -lmysqlcppconn -std=c++11
+
 char *serIRK, *usrIRK, *pwdIRK, *dbIRK;
 
 using namespace std;
@@ -59,12 +62,6 @@ class MyException
 };
 
 
-bool FormatCheck(string kod){
-	return !kod.empty() && (
-	 (kod.size()==6 && isdigit(kod[0]) && isdigit(kod[1]) && kod[2]=='-' && isdigit(kod[3]) && isdigit(kod[4]) && isdigit(kod[5]))
-	 || (kod.size()==5 && isdigit(kod[0]) && isdigit(kod[1]) && isdigit(kod[2]) && isdigit(kod[3]) && isdigit(kod[4])));
-}
-
 class BadRecord{
 
 	int pk_;
@@ -72,13 +69,19 @@ class BadRecord{
 	string miejscowosc_;
 	string poczta_;
 	int err_;
+	string remarks_;
 
 	public:
 
-	BadRecord (int pk, string kod, string miejscowosc="brak", string poczta="brak"):
-		pk_(pk), kod_(kod), miejscowosc_(miejscowosc), poczta_(poczta), err_(0){
-		if(!FormatCheck(kod)) err_ = 1;
-		else err_=0;
+	BadRecord (int pk, string kod, string miejscowosc="brak", string poczta="brak")
+		:pk_(pk), kod_(kod), miejscowosc_(miejscowosc), poczta_(poczta){
+		if (kod.empty()) err_ = 11;
+		else if(kod.size()==5 && isdigit(kod[0]) && isdigit(kod[1]) && isdigit(kod[2]) && isdigit(kod[3]) && isdigit(kod[4])){
+			err_ = 0;
+			remarks_ = "[brak kreski w kodzie]";
+		}
+		else if(kod.size()==6 && isdigit(kod[0]) && isdigit(kod[1]) && kod[2]=='-' && isdigit(kod[3]) && isdigit(kod[4]) && isdigit(kod[5])) err_ = 0;
+		else err_ = 10;
 	}
 	
 	int Pk()const{
@@ -113,10 +116,11 @@ class BadRecord{
 
 		switch(err_){
 			case 0: return "OK";
-			case 1: return "błąd: zły format kodu";
+			case 10: return "błąd: zły format kodu";
 			case 2: return "błąd: kod nie istnieje";
 			case 3: return "błąd: do tego kodu nie jest przypisana podana poczta.";
 			case 4: return "ostrzeżenie: poczta pasująca do podanego kodu pocztowego jest wpisana w polu miejscowość.";
+			case 11: return "błąd: brak wpisanego kodu";
 		}
 		assert(false);
 		return "";
@@ -128,6 +132,14 @@ class BadRecord{
 	
 	void InsertError(int er){
 		err_ = er;
+	}
+
+	void InsertRemark(string remark){
+		remarks_ = remarks_.empty() ? remark : remarks_ + " " + remark;
+	}
+
+	string Remarks() const{
+		return remarks_;
 	}
 };
 
@@ -145,34 +157,16 @@ ostream& operator << (ostream& wy, BadRecord x){
 
 	if(x.IsErr()) wy<<"("  << x.Error() << " [" << x.NrErr() << "]" << ")";
 	else wy << "OK";
+
+	if(!x.Remarks().empty()) wy << " uwagi:" << x.Remarks();
 	
 	return wy;
 }
 
 bool SameString (string a, string b){
-	if(a.size()<1 || b.size()<1) return a==b;
-	int i = a.find("-");
-	int j = b.find("-");
-	
-	if (i!=static_cast<int>(string::npos))
-		a.erase(i);
-
-	if (j!=static_cast<int>(string::npos))
-		b.erase(j);
-
-	i = a.find(" ");
-	j = b.find(" ");
-
-	if (i!=static_cast<int>(string::npos))
-		a.erase(i);
-	if (j!=static_cast<int>(string::npos))
-		b.erase(j);
-
-	transform(a.begin(), a.end(), a.begin(), ::tolower);
-	transform(b.begin(), b.end(), b.begin(), ::tolower);
-
+	transform(a.begin(), a.end(), a.begin(), [](char x){return isalnum(x) ? std::tolower(x) : 0;});
+	transform(b.begin(), b.end(), b.begin(), [](char x){return isalnum(x) ? std::tolower(x) : 0;});
 	return a==b;
-
 }
 
 class CmyIRK
@@ -214,39 +208,57 @@ class CmyIRK
          }
       }
 
-	bool CheckPost(BadRecord &record){
-	 stringstream ss;
-         Statement *stmt;
-         ResultSet *res;
-         ss.clear();
-         ss.str("");
-         ss << "SELECT * FROM usos_kody_pocztowe u WHERE u.kod=" << record.KodDigits() << ";";
-         stmt = con -> createStatement();
-         res = stmt -> executeQuery( ss.str().c_str() );
-	 string komunikat="";
+	bool CheckPost(BadRecord &record);
+	void getInfo();
 
-	 if(!res->next()){
+   protected:
+   private:
+      string server,user,passwd,db;
+      Driver *driver;
+      Connection *con;
+};
+
+bool CmyIRK::CheckPost(BadRecord &record){
+	string remarks="";
+	stringstream ss;
+        Statement *stmt;
+        ResultSet *res;
+        ss.clear();
+        ss.str("");
+        ss << "SELECT * FROM usos_kody_pocztowe u WHERE u.kod=" << record.KodDigits() << ";";
+        stmt = con -> createStatement();
+        res = stmt -> executeQuery( ss.str().c_str() );
+
+	if(!res->next()){
 		record.InsertError(2); 			// brak kodu pocztowego w bazie USOS
 		return false;
-	 }
-	 else{
+	}
+	else{
 		do{
 			string tmp=res->getString("poczta");
-			 if(SameString(tmp,record.Poczta())){
-			 	record.InsertError(0);			//krotka wpadła do programu, ale wszystko z nią OK
-				return true;
+			if(SameString(tmp,record.Poczta())){
+			 record.InsertError(0);			//krotka wpadła do programu, ale wszystko z nią OK
+         		 delete res;
+         		 delete stmt;
+			 return true;
 			}
 			if(SameString(tmp,record.Miejscowosc())){ 
-				record.InsertError(4); 			// ostrzeżenie -> poczta pasująca do podanego kodu pocztowego jest wpisana w polu miejscowość
-				return true;
+			 record.InsertError(4); // ostrzeżenie -> poczta pasująca do podanego kodu pocztowego jest wpisana w polu miejscowość
+		         delete res;
+         		 delete stmt;			
+			 return true;
 			}
+			remarks += "," + tmp;
 		}while(res->next());
 		record.InsertError(3); //do podanego kodu jest przypisana inna poczta
+		record.InsertRemark("[poczty pod tym kodem:"+remarks + "]");
+		delete res;
+         	delete stmt;
 		return false;
 	 }
-	}
-      
-    void getInfo(){
+}
+
+void CmyIRK::getInfo(){
          stringstream ss;
          Statement *stmt;
          ResultSet *res;
@@ -261,19 +273,12 @@ class CmyIRK
          {
             BadRecord tmp = 
                 BadRecord(res->getInt("pk"),res->getString("a_kod"),res->getString("a_miejscowosc"), res->getString("a_poczta"));
-		 if(!tmp.IsErr()) CheckPost(tmp); //jeśli nie ma jeszcze po konstrukcji obiektu babola to sprawdza czy poczta jest dobra 
+		if(!tmp.IsErr()) CheckPost(tmp); //jeśli nie ma jeszcze po konstrukcji obiektu babola to sprawdza czy poczta jest dobra 
 		cout << tmp << endl;
-		 }
-         delete res;
-         delete stmt;
-      }
-
-   protected:
-   private:
-      string server,user,passwd,db;
-      Driver *driver;
-      Connection *con;
-};
+	}
+        delete res;
+        delete stmt;
+}
 
 int main()
 {
