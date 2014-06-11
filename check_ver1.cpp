@@ -71,7 +71,7 @@ class BadRecord{
 	int err_;
 	string remarks_;
 
-public:
+	public:
 
 	BadRecord (int pk, string kod, string miejscowosc="brak", string poczta="brak")
 		:pk_(pk), kod_(kod), miejscowosc_(miejscowosc), poczta_(poczta){
@@ -145,19 +145,11 @@ public:
 
 
 ostream& operator << (ostream& wy, BadRecord x){
-<<<<<<< HEAD
 	wy << x.Pk()<< ";"<< x.Kod() << ";"<< x.Miejscowosc() << ";" << x.Poczta() << ";";
 
 	if(x.IsErr()) wy<<"("  << x.Error() << " [" << x.NrErr() << "]" << ");";
 	else wy << "OK;";
 
-=======
-    wy << x.Pk()<< ";"<< x.Kod() << ";"<< x.Miejscowosc() << ";" << x.Poczta() << ";";
-
-	if(x.IsErr()) wy<<"("  << x.Error() << " [" << x.NrErr() << "]" << ");";
-	else wy << "OK;";
-
->>>>>>> 0174894d62337b57767cae3422e3226c71ccc197
 	if(!x.Remarks().empty()) wy << x.Remarks();
 	return wy;
 }
@@ -182,12 +174,11 @@ public:
 	{
 		driver = get_driver_instance();
 		con = NULL;
-
+/* - */
 		con = driver -> connect(server, user, passwd);
 		con -> setAutoCommit(0);
 		con->setSchema(db);
-
-<<<<<<< HEAD
+/* - */
 	}
 	catch (sql::SQLException &e) 
 	{
@@ -208,24 +199,14 @@ public:
 	}
 }
 
-	bool CheckPost(BadRecord &record);
-	void getInfo();
+bool CheckPost(BadRecord &record);
+void getInfo();
 
 protected:
 private:
 	string server,user,passwd,db;
 	Driver *driver;
 	Connection *con;
-=======
-	bool CheckPost(BadRecord &record);
-	void getInfo();
-
-   protected:
-   private:
-      string server,user,passwd,db;
-      Driver *driver;
-      Connection *con;
->>>>>>> 0174894d62337b57767cae3422e3226c71ccc197
 };
 
 bool CmyIRK::CheckPost(BadRecord &record){
@@ -305,7 +286,7 @@ int main()
 
 		myIRK = new CmyIRK(serIRK, usrIRK, pwdIRK, dbIRK);
 		myIRK->getInfo();
-     
+
 	}
 	catch(MyException& e)
 	{
