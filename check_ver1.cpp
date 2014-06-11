@@ -145,21 +145,12 @@ class BadRecord{
 
 
 ostream& operator << (ostream& wy, BadRecord x){
-    wy << x.Pk()<< ". " ;
-	if(!x.Kod().empty()) wy << x.Kod() << " ";
-	else wy << "??????" << " ";
+    wy << x.Pk()<< ";"<< x.Kod() << ";"<< x.Miejscowosc() << ";" << x.Poczta() << ";";
 
-	if(!x.Miejscowosc().empty()) wy << x.Miejscowosc() << " ";
-	else wy << "??????" << " ";
+	if(x.IsErr()) wy<<"("  << x.Error() << " [" << x.NrErr() << "]" << ");";
+	else wy << "OK;";
 
-	if(!x.Poczta().empty()) wy << x.Poczta() << " ";
-	else wy << "??????" << " ";
-
-	if(x.IsErr()) wy<<"("  << x.Error() << " [" << x.NrErr() << "]" << ")";
-	else wy << "OK";
-
-	if(!x.Remarks().empty()) wy << " uwagi:" << x.Remarks();
-	
+	if(!x.Remarks().empty()) wy << x.Remarks();
 	return wy;
 }
 
@@ -248,7 +239,7 @@ bool CmyIRK::CheckPost(BadRecord &record){
          		 delete stmt;			
 			 return true;
 			}
-			remarks += "," + tmp;
+			remarks += 	"/" + tmp + "/";
 		}while(res->next());
 		record.InsertError(3); //do podanego kodu jest przypisana inna poczta
 		record.InsertRemark("[poczty pod tym kodem:"+remarks + "]");
@@ -260,8 +251,11 @@ bool CmyIRK::CheckPost(BadRecord &record){
 
 void CmyIRK::getInfo(){
          stringstream ss;
+	 ofstream data("wyniki");
+	 data << "Nr;Kod;Miejscowosc;Poczta;Błędy;Uwagi"<<endl;
          Statement *stmt;
          ResultSet *res;
+
 
          ss.clear();
          ss.str("");
@@ -274,7 +268,9 @@ void CmyIRK::getInfo(){
             BadRecord tmp = 
                 BadRecord(res->getInt("pk"),res->getString("a_kod"),res->getString("a_miejscowosc"), res->getString("a_poczta"));
 		if(!tmp.IsErr()) CheckPost(tmp); //jeśli nie ma jeszcze po konstrukcji obiektu babola to sprawdza czy poczta jest dobra 
-		cout << tmp << endl;
+		//cout << tmp << endl;
+		data << tmp << endl;
+
 	}
         delete res;
         delete stmt;
